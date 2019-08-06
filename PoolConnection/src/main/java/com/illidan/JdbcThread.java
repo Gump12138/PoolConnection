@@ -9,11 +9,12 @@ import java.sql.Statement;
  * @author 甘明波
  * @date 2019-08-02
  */
-public class JdbcThread implements Runnable {
+public class JdbcThread extends Thread {
 
     private GantDataSource dataSource;
 
-    public JdbcThread(GantDataSource dataSource) {
+    public JdbcThread(String name, GantDataSource dataSource) {
+        super(name);
         this.dataSource = dataSource;
     }
 
@@ -23,7 +24,7 @@ public class JdbcThread implements Runnable {
     }
 
     private void jdbc() {
-        Connection connection = null;
+        PoolConnection connection = null;
         Statement statement = null;
         ResultSet set = null;
         try {
@@ -35,7 +36,7 @@ public class JdbcThread implements Runnable {
         } catch (SQLException e) {
             e.printStackTrace();
         } finally {
-            dataSource.release(connection,statement,set);
+            dataSource.release(connection, statement, set);
             System.out.println(Thread.currentThread().getName() + " " + dataSource);
         }
     }

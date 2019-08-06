@@ -42,19 +42,16 @@ public class GantDataSource {
      * 3.5在单端队列和双端的对比,暂时没有那么大的需求需要双向存取（Deque）
      * 综上所述需要用LinkedBlockingQueue
      */
-    private LinkedBlockingQueue<Connection> freeQueue;
+    private LinkedBlockingQueue<PoolConnection> freeQueue;
     /**
      * 正在占用连接队列
      */
-    private LinkedBlockingQueue<Connection> busyQueue;
+    private LinkedBlockingQueue<PoolConnection> busyQueue;
     /**
      * 数据库连接信息
      */
     private Configuration configuration;
-    /**
-     * 驱动：JDBC实现类
-     */
-    private Class driver;
+    private ConnectionFactory factory;
 
     /**
      * 配置文件构造器
@@ -79,8 +76,8 @@ public class GantDataSource {
      */
     private void initPoolConnectList() {
         LOGGER.debug("初始化数据库连接池");
-        //注册驱动
-        registerDriver();
+        factory = ConnectionFactory.getInstance(this);
+
         //初始化各个队列
         initQueue();
         //填满空闲队列
@@ -96,50 +93,25 @@ public class GantDataSource {
         LOGGER.debug("初始化占用连接池：" + busyQueue.getClass().getSimpleName() + "大小" + maxCount);
     }
 
-    private void registerDriver() {
-        if (driver == null) {
-            String driverStr = configuration.getDriver();
-            try {
-                driver = Class.forName(driverStr);
-                LOGGER.debug("加载数据库驱动");
-            } catch (ClassNotFoundException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
     private void fillQueue() {
-        //准备数据
-        String url = configuration.getUrl();
-        String username = configuration.getUsername();
-        String password = configuration.getPassword();
-        int maxWait = configuration.getMaxWait();
-        Integer minCount = configuration.getMinCount();
         Integer maxCount = configuration.getMaxCount();
-        //将DriverManager内部的日志输出到控制台
-        PrintStream out = System.out;
-        DriverManager.setLogWriter(new PrintWriter(out));
-        DriverManager.setLoginTimeout(maxWait);
+        int minCount = configuration.getMinCount();
         LOGGER.debug("初始化空闲连接池：" + freeQueue.getClass().getSimpleName() + "大小" + maxCount);
-        try {
-            for (int i = 0; i < minCount; i++) {
-                freeQueue.add(DriverManager.getConnection(url, username, password));
-            }
-        } catch (SQLException e) {
-            e.printStackTrace();
+        for (int i = 0; i < minCount; i++) {
+            freeQueue.add(factory.getConnection());
         }
+        LOGGER.debug("初始化空闲连接池：" + freeQueue.getClass().getSimpleName() + "大小" + freeQueue.size());
     }
 
     /**
      * 取得连接
      */
-    public synchronized Connection getConnection() throws SQLException {
-        Connection connection = freeQueue.poll();
+    public PoolConnection getConnection() throws SQLException {
+        PoolConnection connection = freeQueue.poll();
         if (connection == null) {
             int bSize = busyQueue.size();
             if (bSize < configuration.getMaxCount()) {
-                connection = DriverManager.getConnection(configuration.getUrl(), configuration.getUsername(),
-                        configuration.getPassword());
+                connection = factory.getConnection();
                 LOGGER.debug(connection + "连接创建");
             } else {
                 throw new RuntimeException("暂时没有空闲的线程,池子大小：" + freeQueue.size() + "，请稍等一会。可~能~就会有线程归还了");
@@ -154,7 +126,7 @@ public class GantDataSource {
     /**
      * 将连接从占用队列到空闲队列
      */
-    public void close(Connection connection) {
+    public void close(PoolConnection connection) {
         if (busyQueue.remove(connection)) {
             freeQueue.add(connection);
             LOGGER.debug(connection + "连接归还");
@@ -173,20 +145,21 @@ public class GantDataSource {
      * 如果整个连接正在执行中
      */
     public void close() throws SQLException {
+        LOGGER.debug("正在关闭数据库");
         if (freeQueue.size() > 0) {
-            for (Connection next : freeQueue) {
-                next.close();
+            for (PoolConnection next : freeQueue) {
+                next.getConnection().close();
                 LOGGER.debug("关闭连接:" + next);
             }
             freeQueue.clear();
             LOGGER.debug("清空空闲队列:" + dataSource);
         }
         if (busyQueue.size() > 0) {
-            for (Connection next : busyQueue) {
-                next.close();
+            for (PoolConnection next : busyQueue) {
+                next.getConnection().close();
                 LOGGER.debug("关闭连接:" + next);
             }
-            freeQueue.clear();
+            busyQueue.clear();
             LOGGER.debug("清空占用队列:" + dataSource);
         }
     }
@@ -194,7 +167,7 @@ public class GantDataSource {
     /**
      * 释放资源，归还连接
      */
-    public void release(Connection connection, Statement statement, ResultSet resultSet) {
+    public void release(PoolConnection connection, Statement statement, ResultSet resultSet) {
         if (resultSet != null) {
             try {
                 resultSet.close();
@@ -214,20 +187,8 @@ public class GantDataSource {
         }
     }
 
-    public void release(Connection connection, Statement statement) {
+    public void release(GantConnection connection, Statement statement) {
         release(connection, statement, null);
-    }
-
-    public static Logger getLOGGER() {
-        return LOGGER;
-    }
-
-    public Class getDriver() {
-        return driver;
-    }
-
-    public void setDriver(Class driver) {
-        this.driver = driver;
     }
 
     public Configuration getConfiguration() {
