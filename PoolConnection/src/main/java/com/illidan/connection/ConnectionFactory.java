@@ -1,11 +1,16 @@
-package com.illidan;
+package com.illidan.connection;
 
+import com.illidan.*;
+import com.illidan.config.Configuration;
+import com.illidan.connection.proxy.ProxyConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.sql.Statement;
 
 /**
  * @author 甘明波
@@ -76,10 +81,18 @@ public class ConnectionFactory {
      * 初始化连接信息
      */
     private void initConnectionInfo() {
-        int maxWait = configuration.getMaxWait();
+        Integer timeout = configuration.getConnectionTimeout();
         //将DriverManager内部的日志输出到控制台
         DriverManager.setLogWriter(new PrintWriter(System.out));
-        LOGGER.debug("设置连接池获取连接等待最大的时间：" + maxWait);
-        DriverManager.setLoginTimeout(maxWait);
+        try (Connection connection = DriverManager.getConnection(configuration.getUrl(), configuration.getUsername(),
+                configuration.getPassword());
+             Statement statement = connection.createStatement()) {
+            statement.execute("set names utf8mb4");
+            statement.execute("set global connect_timeout = " + timeout);
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        LOGGER.debug("设置连接池获取连接等待最大的时间：" + timeout);
+        LOGGER.debug("设置连接池各种字符集：utf8mb4");
     }
 }

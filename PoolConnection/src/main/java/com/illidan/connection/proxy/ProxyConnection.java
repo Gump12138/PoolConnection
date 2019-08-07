@@ -1,4 +1,6 @@
-package com.illidan;
+package com.illidan.connection.proxy;
+
+import com.illidan.connection.GantConnection;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
@@ -36,8 +38,8 @@ public class ProxyConnection implements InvocationHandler {
         Object result = null;
         if ("close".equals(methodName)) {
             gantConnection.getDataSource().close(gantConnection);
-        } else if ("getConnection".equals(methodName)) {
-            result = connection;
+        } else if ("getFreeTime".equals(methodName) || "setFreeTime".equals(methodName) || "getStartRunTime".equals(methodName) || "createStatement".equals(methodName)) {
+            result = method.invoke(gantConnection, args);
         } else {
             result = method.invoke(connection, args);
         }

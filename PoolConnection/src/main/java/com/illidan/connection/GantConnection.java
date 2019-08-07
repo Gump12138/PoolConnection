@@ -1,4 +1,7 @@
-package com.illidan;
+package com.illidan.connection;
+
+import com.illidan.config.Configuration;
+import com.illidan.GantDataSource;
 
 import javax.sql.ConnectionEventListener;
 import javax.sql.StatementEventListener;
@@ -12,7 +15,14 @@ import java.util.concurrent.Executor;
  * @date 2019-08-06
  */
 public class GantConnection implements PoolConnection {
-
+    /**
+     * 初始化时间，默认在获得连接之前，需要考虑该连接是否被数据库回收掉
+     */
+    private long freeTime;
+    /**
+     * 开始推送sql语句的时间
+     */
+    private long startRunTime;
     private Connection connection;
     private GantDataSource dataSource;
 
@@ -20,7 +30,8 @@ public class GantConnection implements PoolConnection {
         try {
             this.dataSource = dataSource;
             Configuration c = dataSource.getConfiguration();
-            connection = DriverManager.getConnection(c.getUrl(),c.getUsername(),c.getPassword());
+            connection = DriverManager.getConnection(c.getUrl(), c.getUsername(), c.getPassword());
+            freeTime = System.currentTimeMillis();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -36,8 +47,28 @@ public class GantConnection implements PoolConnection {
     }
 
     @Override
+    public long getFreeTime() {
+        return freeTime;
+    }
+
+    @Override
+    public void setFreeTime(long freeTime) {
+        this.freeTime = freeTime;
+    }
+
+    @Override
+    public long getStartRunTime() {
+        return startRunTime;
+    }
+
+    @Override
+    public void setStartRunTime(long startRunTime) {
+        this.startRunTime = startRunTime;
+    }
+
+    @Override
     public Statement createStatement() throws SQLException {
-        return null;
+        return new GantStatement(this);
     }
 
     @Override

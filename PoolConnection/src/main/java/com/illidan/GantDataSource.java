@@ -1,10 +1,11 @@
 package com.illidan;
 
+import com.illidan.config.Configuration;
+import com.illidan.connection.ConnectionFactory;
+import com.illidan.connection.PoolConnection;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.PrintStream;
-import java.io.PrintWriter;
 import java.sql.*;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -51,6 +52,9 @@ public class GantDataSource {
      * 数据库连接信息
      */
     private Configuration configuration;
+    /**
+     * 连接创建工厂
+     */
     private ConnectionFactory factory;
 
     /**
@@ -66,7 +70,11 @@ public class GantDataSource {
      */
     public static GantDataSource getInstance(String propertiesFile) {
         if (dataSource == null) {
-            dataSource = new GantDataSource(propertiesFile);
+            synchronized (GantDataSource.class) {
+                if (dataSource == null) {
+                    dataSource = new GantDataSource(propertiesFile);
+                }
+            }
         }
         return dataSource;
     }
@@ -77,7 +85,6 @@ public class GantDataSource {
     private void initPoolConnectList() {
         LOGGER.debug("初始化数据库连接池");
         factory = ConnectionFactory.getInstance(this);
-
         //初始化各个队列
         initQueue();
         //填满空闲队列
@@ -87,7 +94,7 @@ public class GantDataSource {
     }
 
     private void initQueue() {
-        Integer maxCount = configuration.getMaxCount();
+        int maxCount = configuration.getMaxCount();
         freeQueue = new LinkedBlockingQueue<>(maxCount);
         busyQueue = new LinkedBlockingQueue<>(maxCount);
         LOGGER.debug("初始化占用连接池：" + busyQueue.getClass().getSimpleName() + "大小" + maxCount);
@@ -106,21 +113,36 @@ public class GantDataSource {
     /**
      * 取得连接
      */
-    public PoolConnection getConnection() throws SQLException {
+    public PoolConnection getConnection() {
         PoolConnection connection = freeQueue.poll();
-        if (connection == null) {
-            int bSize = busyQueue.size();
-            if (bSize < configuration.getMaxCount()) {
-                connection = factory.getConnection();
-                LOGGER.debug(connection + "连接创建");
-            } else {
-                throw new RuntimeException("暂时没有空闲的线程,池子大小：" + freeQueue.size() + "，请稍等一会。可~能~就会有线程归还了");
-            }
+        if (isNeededCreate(connection)) {
+            connection = factory.getConnection();
+            LOGGER.debug(connection + "连接创建");
         }
         busyQueue.add(connection);
         LOGGER.debug(connection + "连接取出");
         LOGGER.debug(toString());
         return connection;
+    }
+
+    /**
+     * 检测连接是否需要被创建
+     */
+    private boolean isNeededCreate(PoolConnection connection) {
+        boolean flag = false;
+        //连接为空并且在最大连接数之内
+        if (connection == null && (busyQueue.size() + freeQueue.size()) <= configuration.getMaxCount()) {
+            flag = true;
+        } else if (configuration.getTestWhileIdle() && connection != null) {
+            //需要检测该连接是否被数据库回收了
+            long time = System.currentTimeMillis() - connection.getFreeTime();
+            if (time >= configuration.getTimeBetweenEvictionRunsMillis()) {
+                if (!isValid(connection)) {
+                    flag = true;
+                }
+            }
+        }
+        return flag;
     }
 
     /**
@@ -187,8 +209,51 @@ public class GantDataSource {
         }
     }
 
-    public void release(GantConnection connection, Statement statement) {
+    public void release(PoolConnection connection, Statement statement) {
         release(connection, statement, null);
+    }
+
+    /**
+     * 连接是否有效，是否没有被数据库回收
+     */
+    public boolean isValid(PoolConnection connection) {
+        boolean flag = false;
+        PreparedStatement statement = null;
+        ResultSet resultSet = null;
+        try {
+            Connection con = connection.getConnection();
+            statement = con.prepareStatement("select 1");
+            resultSet = statement.executeQuery();
+            if (resultSet.next()) {
+                flag = true;
+            }
+        } catch (SQLException e) {
+            return false;
+        } finally {
+            release(connection, statement, resultSet);
+            connection.setFreeTime(System.currentTimeMillis());
+        }
+        return flag;
+    }
+
+    /**
+     * 回收超时连接，暂时没有完成
+     */
+    public void removeAbandoned() {
+        if (configuration.getRemoveAbandoned()) {
+            try {
+                for (PoolConnection connection : busyQueue) {
+                    long startTime = connection.getStartRunTime();
+                    if ((System.currentTimeMillis() - startTime) > configuration.getRemoveAbandonedTimeout()) {
+                        LOGGER.debug("回收连接：" + connection);
+                        connection.getConnection().close();
+                        busyQueue.remove(connection);
+                    }
+                }
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
     }
 
     public Configuration getConfiguration() {

@@ -1,4 +1,7 @@
-package com.illidan;
+package com.illidan.thread;
+
+import com.illidan.GantDataSource;
+import com.illidan.connection.PoolConnection;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -8,11 +11,11 @@ import java.sql.Statement;
  * @author 甘明波
  * @date 2019-08-02
  */
-public class JdbcThread extends Thread {
+public class TestThread extends Thread {
 
     private GantDataSource dataSource;
 
-    public JdbcThread(String name, GantDataSource dataSource) {
+    public TestThread(String name, GantDataSource dataSource) {
         super(name);
         this.dataSource = dataSource;
     }
