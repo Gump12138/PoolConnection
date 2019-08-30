@@ -9,7 +9,14 @@ import java.util.PriorityQueue;
  */
 public interface PoolStatement extends Statement {
     void setStartRunTime(long startRunTime);
+
     long getStartRunTime();
+
     void setStatement(Statement statement);
+
     Statement getStatement();
+
+    void setExecutionTime(long executionTime);
+
+    long getExecutionTime();
 }

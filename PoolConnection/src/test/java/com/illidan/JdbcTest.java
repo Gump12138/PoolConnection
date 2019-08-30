@@ -4,7 +4,9 @@ import com.illidan.connection.PoolConnection;
 import com.illidan.thread.TestThread;
 import org.junit.Test;
 
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 
 /**
  * 需要配合数据库关闭
@@ -14,7 +16,7 @@ import java.sql.SQLException;
  */
 public class JdbcTest {
     @Test
-    public void selectTest() {
+    public void removeAbandoned() {
         GantDataSource dataSource = null;
         try {
             dataSource = GantDataSource.getInstance("jdbc");
@@ -66,6 +68,20 @@ public class JdbcTest {
                     e.printStackTrace();
                 }
             }
+        }
+    }
+
+    @Test
+    public void select1() {
+        try (GantDataSource dataSource = GantDataSource.getInstance("jdbc")) {
+            Thread.sleep(1000);
+            PoolConnection connection = dataSource.getConnection();
+            Statement statement = connection.createStatement();
+            System.out.println("SELECT 1");
+            ResultSet set = statement.executeQuery("SELECT 1");
+            System.out.println("结果集：1");
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 }

@@ -12,7 +12,7 @@ public class GantStatement implements PoolStatement {
 
     public GantStatement(PoolConnection connection) throws SQLException {
         this.connection = connection;
-        this.statement = connection.createStatement();
+        this.statement = connection.getConnection().createStatement();
     }
 
     @Override
@@ -23,6 +23,16 @@ public class GantStatement implements PoolStatement {
     @Override
     public long getStartRunTime() {
         return connection.getStartRunTime();
+    }
+
+    @Override
+    public void setExecutionTime(long executionTime) {
+        connection.setExecutionTime(executionTime);
+    }
+
+    @Override
+    public long getExecutionTime() {
+        return connection.getExecutionTime();
     }
 
     @Override

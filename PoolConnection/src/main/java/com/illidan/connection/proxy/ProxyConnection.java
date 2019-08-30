@@ -19,11 +19,7 @@ public class ProxyConnection implements InvocationHandler {
 
     public ProxyConnection(GantConnection gantConnection) {
         this.gantConnection = gantConnection;
-        try {
-            this.connection = gantConnection.getConnection();
-        } catch (SQLException e) {
-            e.printStackTrace();
-        }
+        this.connection = gantConnection.getConnection();
     }
 
     public Object getProxyObject() {
@@ -38,7 +34,7 @@ public class ProxyConnection implements InvocationHandler {
         Object result = null;
         if ("close".equals(methodName)) {
             gantConnection.getDataSource().close(gantConnection);
-        } else if ("getFreeTime".equals(methodName) || "setFreeTime".equals(methodName) || "getStartRunTime".equals(methodName) || "createStatement".equals(methodName)) {
+        } else if ("getFreeTime".equals(methodName) || "setFreeTime".equals(methodName) || "getStartRunTime".equals(methodName) || "createStatement".equals(methodName) || "getConnection".equals(methodName)) {
             result = method.invoke(gantConnection, args);
         } else {
             result = method.invoke(connection, args);

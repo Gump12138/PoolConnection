@@ -1,6 +1,14 @@
 <component name="ArtifactManager">
   <artifact type="war" name="PoolConnection:war">
     <output-path>$PROJECT_DIR$/PoolConnection/target</output-path>
-    <root id="archive" name="PoolConnection.war" />
+    <properties id="maven-jee-properties">
+      <options>
+        <module>PoolConnection</module>
+        <packaging>war</packaging>
+      </options>
+    </properties>
+    <root id="archive" name="PoolConnection.war">
+      <element id="artifact" artifact-name="PoolConnection:war exploded" />
+    </root>
   </artifact>
 </component>

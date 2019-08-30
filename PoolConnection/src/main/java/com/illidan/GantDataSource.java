@@ -7,7 +7,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.*;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.LinkedList;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Gant数据库连接池
@@ -16,16 +18,19 @@ import java.util.concurrent.LinkedBlockingQueue;
  * @author 甘明波
  * @date 2019-08-01
  */
-public class GantDataSource {
+public class GantDataSource implements AutoCloseable{
+
     /**
      * 日志
      */
     private static final Logger LOGGER = LoggerFactory.getLogger(GantDataSource.class);
+
     /**
      * 单例模式：保存数据库连接池子对象
      * 并不需要过多的连接池，不好管理其次还浪费，直接设置最大连接数或是增强一下单项队列不久行了嘛
      */
-    private static GantDataSource dataSource;
+    private volatile static GantDataSource dataSource;
+
     /**
      * 空闲连接队列
      * 这样做的目的
@@ -43,15 +48,18 @@ public class GantDataSource {
      * 3.5在单端队列和双端的对比,暂时没有那么大的需求需要双向存取（Deque）
      * 综上所述需要用LinkedBlockingQueue
      */
-    private LinkedBlockingQueue<PoolConnection> freeQueue;
+    private LinkedList<PoolConnection> freeQueue;
+
     /**
      * 正在占用连接队列
      */
-    private LinkedBlockingQueue<PoolConnection> busyQueue;
+    private LinkedList<PoolConnection> busyQueue;
+
     /**
      * 数据库连接信息
      */
     private Configuration configuration;
+
     /**
      * 连接创建工厂
      */
@@ -95,15 +103,13 @@ public class GantDataSource {
 
     private void initQueue() {
         int maxCount = configuration.getMaxCount();
-        freeQueue = new LinkedBlockingQueue<>(maxCount);
-        busyQueue = new LinkedBlockingQueue<>(maxCount);
-        LOGGER.debug("初始化占用连接池：" + busyQueue.getClass().getSimpleName() + "大小" + maxCount);
+        freeQueue = new LinkedList<>();
+        busyQueue = new LinkedList<>();
     }
 
     private void fillQueue() {
         Integer maxCount = configuration.getMaxCount();
         int minCount = configuration.getMinCount();
-        LOGGER.debug("初始化空闲连接池：" + freeQueue.getClass().getSimpleName() + "大小" + maxCount);
         for (int i = 0; i < minCount; i++) {
             freeQueue.add(factory.getConnection());
         }
@@ -166,6 +172,7 @@ public class GantDataSource {
      * 关闭整个连接池子,包括其中的连接
      * 如果整个连接正在执行中
      */
+    @Override
     public void close() throws SQLException {
         LOGGER.debug("正在关闭数据库");
         if (freeQueue.size() > 0) {
@@ -237,17 +244,20 @@ public class GantDataSource {
     }
 
     /**
-     * 回收超时连接，暂时没有完成
+     * 回收超时连接
      */
     public void removeAbandoned() {
         if (configuration.getRemoveAbandoned()) {
             try {
+                final Integer abandonedTimeout = configuration.getRemoveAbandonedTimeout();
                 for (PoolConnection connection : busyQueue) {
                     long startTime = connection.getStartRunTime();
-                    if ((System.currentTimeMillis() - startTime) > configuration.getRemoveAbandonedTimeout()) {
-                        LOGGER.debug("回收连接：" + connection);
-                        connection.getConnection().close();
-                        busyQueue.remove(connection);
+                    if (startTime > 0 && connection.getExecutionTime() == -1) {
+                        if (System.currentTimeMillis() - startTime > abandonedTimeout) {
+                            LOGGER.debug("回收连接：" + connection);
+                            connection.getConnection().close();
+                            busyQueue.remove(connection);
+                        }
                     }
                 }
             } catch (SQLException e) {
@@ -263,6 +273,20 @@ public class GantDataSource {
     public void setConfiguration(Configuration configuration) {
         this.configuration = configuration;
         LOGGER.debug("设置configuration属性");
+    }
+
+    private final Lock lock = new ReentrantLock();
+
+    public void addConnection(Connection connection) {
+
+    }
+
+    public int getFreeSize() {
+        return freeQueue.size();
+    }
+
+    public int getBusySize() {
+        return busyQueue.size();
     }
 
     @Override

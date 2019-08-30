@@ -2,6 +2,7 @@ package com.illidan.connection;
 
 import com.illidan.config.Configuration;
 import com.illidan.GantDataSource;
+import com.illidan.connection.proxy.ProxyStatement;
 
 import javax.sql.ConnectionEventListener;
 import javax.sql.StatementEventListener;
@@ -23,6 +24,7 @@ public class GantConnection implements PoolConnection {
      * 开始推送sql语句的时间
      */
     private long startRunTime;
+    private long executionTime = -1;
     private Connection connection;
     private GantDataSource dataSource;
 
@@ -42,7 +44,7 @@ public class GantConnection implements PoolConnection {
     }
 
     @Override
-    public Connection getConnection() throws SQLException {
+    public Connection getConnection() {
         return connection;
     }
 
@@ -67,8 +69,18 @@ public class GantConnection implements PoolConnection {
     }
 
     @Override
+    public void setExecutionTime(long executionTime) {
+        this.executionTime = executionTime;
+    }
+
+    @Override
+    public long getExecutionTime() {
+        return executionTime;
+    }
+
+    @Override
     public Statement createStatement() throws SQLException {
-        return new GantStatement(this);
+        return (Statement) new ProxyStatement(new GantStatement(this)).getProxyObject();
     }
 
     @Override
@@ -108,14 +120,13 @@ public class GantConnection implements PoolConnection {
 
     @Override
     public void close() throws SQLException {
-
     }
 
     /**
      * 关闭意味着空闲
      */
     @Override
-    public boolean isClosed() throws SQLException {
+    public boolean isClosed() {
         return !dataSource.isBusy(connection);
     }
 

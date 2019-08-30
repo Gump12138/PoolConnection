@@ -9,7 +9,14 @@ import java.sql.Connection;
  */
 public interface PoolConnection extends Connection, PooledConnection {
     long getFreeTime();
+
     void setFreeTime(long freeTime);
+
     long getStartRunTime();
+
     void setStartRunTime(long startRunTime);
+
+    void setExecutionTime(long executionTime);
+
+    long getExecutionTime();
 }
